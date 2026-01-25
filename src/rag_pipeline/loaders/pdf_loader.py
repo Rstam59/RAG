@@ -47,3 +47,27 @@ def read_pdf_text_best_effort(path: str) -> str:
     except:
         return ""
 
+
+
+def read_pdf_text_strict(path: str, enable_ocr: bool) -> str:
+    """
+    Returns: (text, source)
+        source: 'text' | 'ocr' | 'none'
+    """
+
+    text = read_pdf_text_best_effort(path)
+    if text:
+        return text, "text"
+    
+    if not enable_ocr:
+        return "", 'none'
+    
+
+    try:
+        from rag_pipeline.loaders.ocr_loader import ocr_pdf_to_text
+        ocr_text = ocr_pdf_to_text(path)
+        if ocr_text:
+            return ocr_text, 'ocr'
+        return "", 'none'
+    except Exception:
+        return '', 'none'

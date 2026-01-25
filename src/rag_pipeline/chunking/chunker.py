@@ -1,5 +1,3 @@
-
-
 def chunk_text(text: str, chunk_chars: int, overlap: int, max_chunks: int = 0) -> list[str]:
     if not text:
         return []
