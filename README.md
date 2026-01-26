@@ -1,58 +1,42 @@
+```mermaid
 flowchart TD
-  %% ---------------------------
-  %% Inputs
-  %% ---------------------------
-  A[PDF Corpus<br/>data/raw/pdfs/*.pdf]
-  B[.env<br/>Infra wiring<br/>QDRANT_URL, PDF_DIR, etc]
-  C[configs/pipeline.yaml<br/>Versioned algorithm config<br/>chunking, embed model, versions]
+  A[PDFs folder]
+  B[.env infra vars]
+  C[pipeline.yaml algorithm config]
 
-  %% ---------------------------
-  %% Ingestion
-  %% ---------------------------
-  subgraph INGESTION[Ingestion Pipeline (Stage 3)]
-    D[Discover PDFs<br/>glob *.pdf]
-    E[Versioning<br/>file_hash=sha256(pdf bytes)<br/>doc_id=file_hash<br/>cfg_fp=hash(config)<br/>corpus_version=hash(cfg_fp + doc_ids)]
-    F[Resume Cache<br/>data/ingested/ingested_{corpus_version}.txt<br/>skip already ingested docs]
-    G[PDF Loader<br/>best-effort extract_text<br/>decrypt if possible<br/>skip broken pages]
-    H[Chunking<br/>chunk_text(chunk_chars, overlap)]
-    I[Embedding<br/>SentenceTransformer.encode(chunks)]
-    J[Indexing to Qdrant<br/>point_id=uuid5(doc_id:chunk_index)<br/>payload={doc_id,file,text,...,versions}<br/>upsert batches]
-    K[Tracking<br/>JSON logs + run manifest<br/>data/runs/{run_id}.json]
+  subgraph INGESTION[Ingestion Stage 3]
+    D[Discover PDFs]
+    E[Compute doc_id and corpus_version]
+    F[Resume cache per corpus_version]
+    G[PDF text extraction]
+    H[Chunking]
+    I[Embedding]
+    J[Upsert to Qdrant]
+    K[Run manifest + logs]
   end
 
-  %% ---------------------------
-  %% Retrieval
-  %% ---------------------------
   subgraph RETRIEVAL[Retrieval]
-    Q[User Query]
-    R[Embed Query<br/>(same embedding model)]
-    S[Qdrant Search (HTTP)<br/>filter corpus_version]
-    T[Top Hits<br/>(chunks)]
-    U[Deduplicate by doc_id<br/>rank docs]
+    Q[Query text]
+    R[Embed query]
+    S[Qdrant HTTP search]
+    U[Top docs]
   end
 
-  %% ---------------------------
-  %% Evaluation
-  %% ---------------------------
-  subgraph EVAL[Evaluation (Doc-Level)]
-    V[data/eval/queries.jsonl<br/>qid + query]
-    W[data/eval/labels.jsonl<br/>qid → gold_doc_ids]
-    X[Metrics<br/>recall@k + latency p50/p95]
-    Y[Eval Report<br/>data/runs/eval_{corpus_version}.json]
+  subgraph EVAL[Evaluation]
+    V[queries.jsonl]
+    W[labels.jsonl doc-level]
+    X[metrics recall@k + latency]
+    Y[eval report]
   end
 
-  %% ---------------------------
-  %% Links
-  %% ---------------------------
-  A --> D
+  A --> D --> E --> F --> G --> H --> I --> J --> K
   B --> INGESTION
   C --> INGESTION
 
-  D --> E --> F --> G --> H --> I --> J --> K
-
-  Q --> R --> S --> T --> U
+  Q --> R --> S --> U
   J --> S
 
   V --> R
-  W --> X
-  U --> X --> Y
+  U --> X
+  W --> X --> Y
+```
