@@ -1,71 +1,58 @@
 flowchart TD
-  A[PDF Corpus<br/>data/raw/pdfs/*.pdf] --> B[Ingestion Pipeline<br/>(stage1 → stage3)]
-  B --> C[(Qdrant Vector DB<br/>rag_collection)]
-  C --> D[Retrieval<br/>query → embed → search]
-  D --> E[Evaluation<br/>queries + doc-labels → metrics]
+  %% ---------------------------
+  %% Inputs
+  %% ---------------------------
+  A[PDF Corpus<br/>data/raw/pdfs/*.pdf]
+  B[.env<br/>Infra wiring<br/>QDRANT_URL, PDF_DIR, etc]
+  C[configs/pipeline.yaml<br/>Versioned algorithm config<br/>chunking, embed model, versions]
 
-
-
-
-flowchart TD
-  subgraph CFG[Configuration]
-    ENV[.env<br/>(infra wiring only)] --> INFRA[InfraSettings]
-    YAML[configs/pipeline.yaml<br/>(versioned algorithm config)] --> PIPE[PipelineConfig]
+  %% ---------------------------
+  %% Ingestion
+  %% ---------------------------
+  subgraph INGESTION[Ingestion Pipeline (Stage 3)]
+    D[Discover PDFs<br/>glob *.pdf]
+    E[Versioning<br/>file_hash=sha256(pdf bytes)<br/>doc_id=file_hash<br/>cfg_fp=hash(config)<br/>corpus_version=hash(cfg_fp + doc_ids)]
+    F[Resume Cache<br/>data/ingested/ingested_{corpus_version}.txt<br/>skip already ingested docs]
+    G[PDF Loader<br/>best-effort extract_text<br/>decrypt if possible<br/>skip broken pages]
+    H[Chunking<br/>chunk_text(chunk_chars, overlap)]
+    I[Embedding<br/>SentenceTransformer.encode(chunks)]
+    J[Indexing to Qdrant<br/>point_id=uuid5(doc_id:chunk_index)<br/>payload={doc_id,file,text,...,versions}<br/>upsert batches]
+    K[Tracking<br/>JSON logs + run manifest<br/>data/runs/{run_id}.json]
   end
 
-  subgraph DISC[Discovery + Versioning]
-    PDFs[Find PDFs<br/>glob PDF_DIR] --> HASH[doc_id = sha256(pdf_bytes)]
-    PIPE --> CFP[config_fingerprint(hash of yaml)]
-    HASH --> CV[corpus_version = hash(cfg_fp + sorted(doc_ids))]
-    CFP --> CV
+  %% ---------------------------
+  %% Retrieval
+  %% ---------------------------
+  subgraph RETRIEVAL[Retrieval]
+    Q[User Query]
+    R[Embed Query<br/>(same embedding model)]
+    S[Qdrant Search (HTTP)<br/>filter corpus_version]
+    T[Top Hits<br/>(chunks)]
+    U[Deduplicate by doc_id<br/>rank docs]
   end
 
-  subgraph RESUME[Resume / Idempotency]
-    CV --> CACHE[data/ingested/ingested_<corpus_version>.txt]
-    CACHE --> SKIP{doc_id already ingested?}
+  %% ---------------------------
+  %% Evaluation
+  %% ---------------------------
+  subgraph EVAL[Evaluation (Doc-Level)]
+    V[data/eval/queries.jsonl<br/>qid + query]
+    W[data/eval/labels.jsonl<br/>qid → gold_doc_ids]
+    X[Metrics<br/>recall@k + latency p50/p95]
+    Y[Eval Report<br/>data/runs/eval_{corpus_version}.json]
   end
 
-  subgraph DATA[Data Processing]
-    SKIP -- No --> LOAD[Loader<br/>read_pdf_text_best_effort]
-    LOAD --> CHUNK[Chunker<br/>chunk_text(chunk_chars, overlap)]
-    CHUNK --> EMB[Embedder<br/>encode(chunks) → vectors]
-  end
+  %% ---------------------------
+  %% Links
+  %% ---------------------------
+  A --> D
+  B --> INGESTION
+  C --> INGESTION
 
-  subgraph INDEX[Indexing]
-    EMB --> PTS[Build Points<br/>id=uuid5(doc_id:chunk_index)<br/>payload includes doc_id, text, corpus_version...]
-    PTS --> UPSERT[Qdrant upsert<br/>batched]
-    UPSERT --> MARK[Append doc_id to cache<br/>(only after success)]
-  end
+  D --> E --> F --> G --> H --> I --> J --> K
 
-  subgraph TRACK[Tracking]
-    MARK --> MANIFEST[data/runs/<run_id>.json<br/>counts + timings + failures<br/>corpus_version + config_fingerprint]
-  end
+  Q --> R --> S --> T --> U
+  J --> S
 
-  SKIP -- Yes --> DONE[(skip)]
-  ENV --> INFRA --> PDFs
-  PIPE --> PDFs
-
-
-
-flowchart TD
-  QSET[data/eval/queries.jsonl<br/>qid + query] --> QEMB[Embed query<br/>same embed model]
-  QEMB --> SEARCH[Qdrant HTTP search<br/>filter: corpus_version]
-  SEARCH --> HITS[Top hits = chunks<br/>payload contains doc_id]
-  HITS --> DEDUP[Deduplicate doc_id<br/>rank order → doc list]
-
-  LSET[data/eval/labels.jsonl<br/>qid → gold_doc_ids] --> METRICS[Compute metrics<br/>recall@k, MRR(optional), latency p50/p95]
-  DEDUP --> METRICS
-
-  METRICS --> REPORT[data/runs/eval_<corpus>.json<br/>metrics + corpus_version]
-
-
-
-
-
-flowchart LR
-  S1[Stage 1<br/>Make it work] --> S2[Stage 2<br/>Make it modular]
-  S2 --> S3[Stage 3<br/>Make it measurable + reliable]
-
-  S1 --> A1[Single script<br/>no tracking]
-  S2 --> A2[Loaders/Chunking/Embedding/Indexing modules]
-  S3 --> A3[corpus_version + manifests + cache per corpus + doc-level eval]
+  V --> R
+  W --> X
+  U --> X --> Y
