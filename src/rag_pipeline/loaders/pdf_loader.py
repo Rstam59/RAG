@@ -2,12 +2,14 @@ import re
 from pypdf import PdfReader
 from pypdf.errors import DependencyError, PdfReadError
 
+
 _ws = re.compile(r"\s+")
 
 def _clean_text(t: str) -> str:
     t = t.replace("\x00", " ")
-    t = _ws.sub(t).strip()
-    return t 
+    t = _ws.sub(" ", t).strip()
+    return t
+
 
 
 def read_pdf_text_best_effort(path: str) -> str: 
@@ -35,7 +37,6 @@ def read_pdf_text_best_effort(path: str) -> str:
             except Exception:
                 continue
             txt = _clean_text(raw)
-
             if txt:
                 parts.append(txt)
         
@@ -43,6 +44,7 @@ def read_pdf_text_best_effort(path: str) -> str:
     
 
     except (PdfReadError, DependencyError):
+        print("PDF read error or dependency error")
         return ""
     except:
         return ""

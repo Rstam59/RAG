@@ -1,29 +1,70 @@
-import os 
+import os
 from dataclasses import dataclass
+from typing import Any, Dict, Tuple
+
+import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
 @dataclass(frozen=True)
-class Settings:
-    pdf_dir: str = os.getenv('PDF_DIR', 'data/raw/pdfs')
-    ingested_cache: str = os.getenv("INGESTED_CACHE", 'data/ingested_files.txt')
-    runs_dir: str = os.getenv("RUNS_DIR", 'data/runs')
+class InfraSettings:
+    env: str = os.getenv("ENV", "dev")
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
-
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", 'sentence-transformers/all-MiniLM-L6-v2')
-    embed_batch_size: int = int(os.getenv("EMBED_BATCH_SIZE", 32))
-
-
-    qdrant_host: str = os.getenv("QDRANT_HOST", "localhost")
-    qdrant_port: int = int(os.getenv("QDRANT_PORT", "6333"))
+    qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333").rstrip("/")
     qdrant_collection: str = os.getenv("QDRANT_COLLECTION", "rag_collection")
-    upsert_batch_size: int = int(os.getenv("UPSERT_BATCH_SIZE", "64"))
 
-    chunk_chars: int = int(os.getenv("CHUNK_CHARS", "1200"))
-    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "200"))
+    pdf_dir: str = os.getenv("PDF_DIR", "data/raw/pdfs")
+    runs_dir: str = os.getenv("RUNS_DIR", "data/runs")
+    ingested_dir: str = os.getenv("INGESTED_DIR", "data/ingested")
 
-    # Stage-2 knobs
-    max_files: int = int(os.getenv("MAX_FILES", "0"))  # 0 = all
-    only_match: str = os.getenv("ONLY_MATCH", "").strip()  # substring filter
-    max_chunks_per_doc: int = int(os.getenv("MAX_CHUNKS_PER_DOC", "0"))
+    pipeline_config: str = os.getenv("PIPELINE_CONFIG", "configs/pipeline.yaml")
+    eval_dir: str = os.getenv("EVAL_DIR", "data/eval")
+
+
+@dataclass(frozen=True)
+class PipelineConfig:
+    pipeline_version: str
+
+    embed_model: str
+    embed_batch_size: int
+    embed_normalize: bool
+
+    chunk_chars: int
+    chunk_overlap: int
+    max_chunks_per_doc: int
+
+    max_files: int
+    only_match: str
+    upsert_batch_size: int
+
+    cleaner_version: str
+    chunker_version: str
+
+
+def load_pipeline_config(path: str) -> Tuple[PipelineConfig, Dict[str, Any]]:
+    with open(path, "r", encoding="utf-8") as f:
+        raw: Dict[str, Any] = yaml.safe_load(f)
+
+    cfg = PipelineConfig(
+        pipeline_version=str(raw["pipeline_version"]),
+
+        embed_model=str(raw["embedding"]["model"]),
+        embed_batch_size=int(raw["embedding"].get("batch_size", 32)),
+        embed_normalize=bool(raw["embedding"].get("normalize", True)),
+
+        chunk_chars=int(raw["chunking"]["chunk_chars"]),
+        chunk_overlap=int(raw["chunking"]["overlap"]),
+        max_chunks_per_doc=int(raw["chunking"].get("max_chunks_per_doc", 0)),
+
+        max_files=int(raw["ingest"].get("max_files", 0)),
+        only_match=str(raw["ingest"].get("only_match", "")).strip(),
+        upsert_batch_size=int(raw["ingest"].get("upsert_batch_size", 64)),
+
+        cleaner_version=str(raw.get("cleaner_version", "clean_v1")),
+        chunker_version=str(raw.get("chunker_version", "chars_v1")),
+    )
+
+    return cfg, raw
