@@ -70,4 +70,4 @@ pypdf
 pytest
 pytest-cov
 ruff
-
+ftfy
