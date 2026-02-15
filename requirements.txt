@@ -73,3 +73,6 @@ ruff
 ftfy
 pymupdf4llm
 pymupdf_layout
+langchain 
+langchain-text-splitters 
+langchain-core
