@@ -1,8 +1,8 @@
 import datetime
 import re
 import shutil 
-# from pypdf import PdfReader
-# from pypdf.errors import DependencyError, PdfReadError
+from pypdf import PdfReader
+from pypdf.errors import DependencyError, PdfReadError
 
 
 import fitz  # PyMuPDF
@@ -143,4 +143,53 @@ def extract_pdf_with_images(path: str, output_img_dir: str = "data/extracted_ima
     finally:
         if doc:
             doc.close()
+
+
+#============ OLD VERSION (Şəkil çıxarışı olmadan) ============#
+_ws = re.compile(r"\s+")
+#old clean function
+def _clean_text(t: str) -> str:
+    t = t.replace("\x00", " ")
+    t = _ws.sub(" ", t).strip()
+    return t
+
+
+
+def read_pdf_text_best_effort(path: str) -> str: 
+    """
+    Best effort pdf extraction:
+
+    - Handles encryiption attempt with empty password
+    - Skips pages that crash
+    - Returns "" for unreadable pages
+    """
+
+    try:
+        reader = PdfReader(path)
+
+        if getattr(reader, 'is_encrypted', False):
+            try:
+                reader.decrypt("")
+            except Exception:
+                return ""
+            
+        parts = []
+        for page in reader.pages:
+            try:
+                raw = page.extract_text() or ""
+            except Exception:
+                continue
+            #Yeni: Təmizlənmiş mətni saxlayırıq, əgər boş deyilsə, onda əlavə edirik
+            txt = clean_text(raw)
+            if txt:
+                parts.append(txt)
+        
+        return '\n\n'.join(parts)
+    
+
+    except (PdfReadError, DependencyError):
+        print("PDF read error or dependency error")
+        return ""
+    except:
+        return ""
 
