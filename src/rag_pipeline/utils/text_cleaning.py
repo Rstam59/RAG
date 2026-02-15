@@ -2,7 +2,6 @@ import re
 import unicodedata
 import ftfy
 
-# --- Universal Regex Pattern-ləri ---
 
 # 1. Görünməz "zibil" simvollar
 _control_chars = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b\u200c\u200d\ufeff\ue000-\uf8ff]")

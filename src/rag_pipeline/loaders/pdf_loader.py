@@ -1,23 +1,22 @@
 import datetime
 import re
 import shutil 
-from pypdf import PdfReader
-from pypdf.errors import DependencyError, PdfReadError
-from rag_pipeline.utils.text_cleaning import clean_text
-import logging
-import os
+# from pypdf import PdfReader
+# from pypdf.errors import DependencyError, PdfReadError
+
+
 import fitz  # PyMuPDF
 import pymupdf4llm  # Yeni əlavə: Markdown çıxarışı üçün PyMuPDF wrapper
 from rag_pipeline.utils.metadata_utils import extract_metadata_from_md
+from rag_pipeline.utils.hashing import get_file_hash
+from rag_pipeline.utils.text_cleaning import clean_text
+
 import os
 import logging
 from typing import List, Dict, Any
-import hashlib
+
 
 logger = logging.getLogger("rag_pipeline.loaders.pdf_loader")
-def get_file_hash(file_bytes):
-    """Şəklin məzmununa görə unikal MD5 hash yaradır."""
-    return hashlib.md5(file_bytes).hexdigest()
 
 def extract_pdf_with_images(path: str, output_img_dir: str = "data/extracted_images") -> list[dict[str, Any]]: 
     """

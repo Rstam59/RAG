@@ -71,3 +71,5 @@ pytest
 pytest-cov
 ruff
 ftfy
+pymupdf4llm
+pymupdf_layout
