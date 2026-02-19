@@ -1,4 +1,6 @@
-pipeline_version: "v0.3.0"
+dataset_id: "main_pdfs"
+
+pipeline_version: "v0.4.0"
 
 embedding:
   model: "sentence-transformers/all-MiniLM-L6-v2"
@@ -8,13 +10,9 @@ embedding:
 chunking:
   chunk_chars: 1200
   overlap: 200
-  max_chunks_per_doc: 0   # 0 = unlimited
+  max_chunks_per_doc: 0
 
 ingest:
-  max_files: 50           # set 0 for full corpus
-  only_match: ""          # substring filter, empty = no filter
+  max_files: 50
+  only_match: ""
   upsert_batch_size: 64
-
-# bump this when you change normalization/cleanup logic
-cleaner_version: "clean_v1"
-chunker_version: "chars_v1"

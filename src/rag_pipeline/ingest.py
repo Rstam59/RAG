@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 from rag_pipeline.logging_setup import setup_logging, log
 from rag_pipeline.manifest import utc_now_iso, write_run_manifest
 from rag_pipeline.settings import InfraSettings, load_pipeline_config
-from rag_pipeline.versioning import sha256_file, stable_doc_id, config_fingerprint, corpus_version
+from rag_pipeline.versioning import sha256_file, stable_doc_id, config_fingerprint
 
 from rag_pipeline.loaders.pdf_loader import read_pdf_text_best_effort
 from rag_pipeline.chunking.chunker import chunk_text
@@ -15,9 +15,9 @@ from rag_pipeline.embedding.embedder import Embedder
 from rag_pipeline.indexing.qdrant_index import QdrantIndex
 
 
-def _cache_path(ingested_dir: str, corpus_ver: str) -> str:
+def _cache_path(ingested_dir: str, dataset_id: str, cfg_fp: str) -> str:
     os.makedirs(ingested_dir, exist_ok=True)
-    return os.path.join(ingested_dir, f"ingested_{corpus_ver}.txt")
+    return os.path.join(ingested_dir, f"ingested_{dataset_id}_{cfg_fp[:12]}.txt")
 
 
 def _load_cache(path: str) -> set[str]:
@@ -43,34 +43,30 @@ def main() -> None:
     pdfs = sorted(glob.glob(os.path.join(infra.pdf_dir, "*.pdf")))
     if pipe.only_match:
         pdfs = [p for p in pdfs if pipe.only_match.lower() in os.path.basename(p).lower()]
+
+    # max_files is dev-only limiter; it must NOT affect cache identity
+    dev_pdfs = pdfs
     if pipe.max_files > 0:
-        pdfs = pdfs[: pipe.max_files]
-    if not pdfs:
+        dev_pdfs = pdfs[: pipe.max_files]
+
+    if not dev_pdfs:
         raise SystemExit(f"No PDFs found after filtering in {infra.pdf_dir}")
 
-    # Compute doc_ids up front -> stable corpus_version
-    docs: List[Tuple[str, str]] = []
-    for p in pdfs:
-        file_hash = sha256_file(p)
-        docs.append((p, stable_doc_id(file_hash)))
-
-    corpus_ver = corpus_version((d for _, d in docs), cfg_fp)
-    cache_path = _cache_path(infra.ingested_dir, corpus_ver)
+    cache_path = _cache_path(infra.ingested_dir, pipe.dataset_id, cfg_fp)
     ingested = _load_cache(cache_path)
 
     run_id = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     started = time.time()
 
-    log(logger, "stage3_start",
+    log(logger, "ingest_start",
         env=infra.env,
         run_id=run_id,
+        dataset_id=pipe.dataset_id,
+        config_fingerprint=cfg_fp,
         pdf_dir=infra.pdf_dir,
-        pdf_count=len(docs),
+        pdf_count=len(dev_pdfs),
         qdrant_url=infra.qdrant_url,
         collection=infra.qdrant_collection,
-        pipeline_version=pipe.pipeline_version,
-        config_fingerprint=cfg_fp,
-        corpus_version=corpus_ver,
         cache_path=cache_path,
         already_ingested=len(ingested),
     )
@@ -85,15 +81,16 @@ def main() -> None:
     failures: List[Dict[str, Any]] = []
 
     payload_meta = {
-        "corpus_version": corpus_ver,
-        "pipeline_version": pipe.pipeline_version,
+        "dataset_id": pipe.dataset_id,
         "config_fingerprint": cfg_fp,
+        "pipeline_version": pipe.pipeline_version,
         "cleaner_version": pipe.cleaner_version,
         "chunker_version": pipe.chunker_version,
     }
 
-    for path, doc_id in docs:
+    for path in dev_pdfs:
         file_name = os.path.basename(path)
+        doc_id = stable_doc_id(sha256_file(path))
 
         if doc_id in ingested:
             log(logger, "skip_cached", file=file_name, doc_id=doc_id)
@@ -154,20 +151,22 @@ def main() -> None:
         )
 
     elapsed = round(time.time() - started, 2)
+
     manifest = {
         "run_id": run_id,
         "created_at_utc": utc_now_iso(),
         "env": infra.env,
 
+        "dataset_id": pipe.dataset_id,
+        "config_fingerprint": cfg_fp,
+        "pipeline_version": pipe.pipeline_version,
+
         "qdrant_url": infra.qdrant_url,
         "collection": infra.qdrant_collection,
 
-        "pipeline_version": pipe.pipeline_version,
-        "config_fingerprint": cfg_fp,
-        "corpus_version": corpus_ver,
-
         "pdf_dir": infra.pdf_dir,
-        "pdf_count": len(docs),
+        "pdf_count_considered": len(dev_pdfs),
+        "pdf_count_available": len(pdfs),
 
         "docs_indexed": docs_indexed,
         "docs_skipped": docs_skipped,
@@ -180,18 +179,20 @@ def main() -> None:
 
     out = write_run_manifest(infra.runs_dir, run_id, manifest)
 
-    log(logger, "stage3_done",
+    log(logger, "ingest_done",
         run_id=run_id,
+        dataset_id=pipe.dataset_id,
+        config_fingerprint=cfg_fp,
         docs_indexed=docs_indexed,
         docs_skipped=docs_skipped,
         vectors_upserted=vectors_upserted,
         elapsed_s=elapsed,
         manifest_path=out,
-        corpus_version=corpus_ver,
     )
 
     print(f"\n[ingest] ✅ Done run_id={run_id}")
-    print(f"[ingest] corpus_version={corpus_ver}")
+    print(f"[ingest] dataset_id={pipe.dataset_id}")
+    print(f"[ingest] config_fingerprint={cfg_fp}")
     print(f"[ingest] manifest={out}")
 
 

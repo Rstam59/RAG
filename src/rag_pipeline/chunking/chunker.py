@@ -1,18 +1,15 @@
+from typing import List
 
-def chunk_text(text: str, 
-               chunk_chars: int, 
-               overlap: int, 
-               max_chunks: int = 0) -> list[str]:
+
+def chunk_text(text: str, chunk_chars: int, overlap: int, max_chunks: int = 0) -> List[str]:
     if not text:
         return []
-    
     step = max(1, chunk_chars - overlap)
-    chunks: list[str] = []
+    chunks: List[str] = []
 
     for start in range(0, len(text), step):
         end = min(len(text), start + chunk_chars)
-        c = text[start: end].strip()
-
+        c = text[start:end].strip()
         if c:
             chunks.append(c)
 
@@ -23,8 +20,3 @@ def chunk_text(text: str,
             break
 
     return chunks
-    
-
-
-
-

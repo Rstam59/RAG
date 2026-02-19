@@ -26,6 +26,7 @@ class InfraSettings:
 
 @dataclass(frozen=True)
 class PipelineConfig:
+    dataset_id: str
     pipeline_version: str
 
     embed_model: str
@@ -49,6 +50,7 @@ def load_pipeline_config(path: str) -> Tuple[PipelineConfig, Dict[str, Any]]:
         raw: Dict[str, Any] = yaml.safe_load(f)
 
     cfg = PipelineConfig(
+        dataset_id=str(raw.get("dataset_id", "default_dataset")).strip(),
         pipeline_version=str(raw["pipeline_version"]),
 
         embed_model=str(raw["embedding"]["model"]),
