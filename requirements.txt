@@ -76,3 +76,5 @@ pymupdf_layout
 langchain 
 langchain-text-splitters 
 langchain-core
+easyocr
+openpyxl
